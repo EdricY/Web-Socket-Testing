@@ -1,34 +1,134 @@
-HTTP/1.1 200 OK
+HTTP/1.1 200 OK Access-Control-Allow-Origin: *
 
 <html>
-        <head>
-                <title>Chat with Friends(TM)</title>
-        </head>
-        <body>
-                <input type="text" id="chatBox">
-                <div id="chat">
-                </div>
-        </body>
+
+<head>
+  <title>Chat with Friends(TM)</title>
+</head>
+
+<body>
+  <div>
+    <input type="text" id="nameBox" placeholder="Your Name" onkeyup="enableButton()">
+    <input type="button" id="join" value="Join Room" onclick="joinRoom()" disabled>
+  </div>
+  <div id="chat" hidden style="width:100%; height:80%; overflow:scroll"></div>
+  <textarea rows="1" id="chatBox" hidden style="width:100%; padding:4px;"></textarea>
+
+</body>
 <script>
-function sendChat(){
-        var xhr = new XMLHttpRequest();
-        let text = document.getElementById("chatBox");
-        xhr.open('POST', 'http://localhost:1421');
-        xhr.onreadystatechange = function() {
-                if(this.readyState == 4){
-		        document.getElementById("chat").innerText = this.response;
-                }
-                console.log(this);
-	}	
-        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-        xhr.send("text=" + text);
-		console.log("sent");
-}
-document.getElementById("chatBox")
-    .addEventListener("keyup", function(event) {
+  var joined = false;
+  var isMarquee = false;
+  var body = document.getElementsByTagName('body')[0];
+  var box = document.getElementById('chatBox');
+  var chat = document.getElementById('chat');
+  var namebox = document.getElementById('nameBox');
+  var joinbtn = document.getElementById('join');
+  var codes = { 
+                "/bikeshed" : bikeshed,
+                "/barrelroll" : spinPage,
+                "/askew" : skew,
+                "/deskew" : deskew,
+                "/marquee" : toggleMarquee
+              };
+  window.onkeydown = function (event) {
     if (event.keyCode == 13) {
-        sendChat();
+      if (event.preventDefault) event.preventDefault();
+      if (box.value) {
+        sendMessage(box.value);
+      }
+      box.value = "";
     }
-});
+  }
+  var url = window.location.hostname;
+  url = 'ws://' + url + ':1421';
+  var socket;
+
+  function enableButton() {
+    if (namebox.value.length > 0)
+      joinbtn.disabled = false;
+    else
+      joinbtn.disabled = true;
+  }
+
+  function joinRoom() {
+    socket = new WebSocket(url);
+    socket.onopen = function () {
+      socket.send(namebox.value, function ack(error) {
+        console.log(error);
+      });
+      joined = true;
+      document.getElementById('join').disabled = true;
+      namebox.disabled = true;
+      chat.hidden = false;
+      chat.autofocus = true;
+      box.hidden = false;
+    }
+    socket.onmessage = function (event) {
+      let message = event.data.split(': ')[1];
+      if (message && message.charAt(0) == '/') {
+        for (key of Object.keys(codes)) {
+          if (message == key) {
+            codeEntered = true;
+            codes[key]();
+          }
+        }
+      }
+      else {
+        chat.innerHTML += '<br>' + event.data;
+        chat.scrollTop = chat.scrollHeight;
+      }
+    }
+  }
+
+  function sendMessage(message) {
+
+    socket.send(message);
+  }
+
+  function bikeshed() {
+    let rand = Math.floor(Math.random() * 360);
+    body.style.backgroundColor = 'hsl(' + rand + ', 50%, 75%)';
+  }
+  function spinPage() {
+    var spinId = setInterval(rotate, 3);
+    var pos = chat.style.transform;
+    pos = pos.split('rotate(').pop();
+    pos = pos.split('deg')[0];
+    if (!pos) pos = 0;
+    pos = +pos;
+    start = +pos;
+    function rotate() {
+      pos = (pos + 1) % 360;
+      chat.style.transform = 'rotate(' + pos + 'deg)';
+      if (pos == start) {
+        clearInterval(spinId);
+      } 
+    }
+    
+  }
+  function skew() {
+    pos = chat.style.transform;
+    pos = pos.split('rotate(').pop();
+    pos = pos.split('deg')[0];
+    pos = +pos;
+    pos = pos + 2;
+    chat.style.transform = 'rotate(' + pos + 'deg)';
+  }
+  function deskew() {
+    chat.style.transform = 'rotate(0deg)';
+  }
+  function toggleMarquee() {
+    if (!isMarquee) {
+      let m = document.createElement('marquee');
+      temp = chat;
+      body.replaceChild(m, chat);
+      m.appendChild(temp);
+      chat = temp;
+    } else {
+      body.replaceChild(chat, chat.parentElement);
+    }
+    isMarquee = !isMarquee;
+  }
 </script>
+
 </html>
