@@ -1,0 +1,201 @@
+<html>
+<canvas id="canvas" width="500" height="780"></canvas>
+
+<script>
+    var vertical = true;
+    var canvas = document.getElementById("canvas");
+    canvas.onmousedown = this.clickAction;
+    var ctx = canvas.getContext("2d");
+
+    var backcolor = "#333";
+    var cardW = 90;
+    var cardH = 150;
+    var padding = 10;
+    var shapes = ["circle", "triangle", "square"];
+    var colors = ["#812", "#26C", "#262"];
+    var shapeColors = ["#F9F", "#FB5", "#8CF"];
+
+    var selected = [];
+    var grid = [];
+    var message = { text: "Select 3 cards", color: "yellow" };
+    var score = 0;
+
+    var drawInterval = setInterval(draw, 100);
+
+    var timer = 60;
+    setInterval( function() { timer -= timer > 0 ? 1 : 0; } , 1000);
+
+    var url = window.location.hostname;
+    url = 'ws://' + url + ':2422';
+    var socket;
+    socket = new WebSocket(url);
+    socket.onopen = function() {
+        socket.send("Connect");
+    }
+    socket.onmessage = function(event) {
+        let data = JSON.parse(event.data);
+        console.log(data);
+        selected = [];
+        grid = processGrid(data.board);
+        if (data.connect) {
+            message.text = "Welcome!";
+            message.color = "#FF0";
+            timer = data.timer;
+        }
+        else if (typeof data.score != 'undefined') {
+            if (data.score > score) {
+                message.text = "Nice Set!";
+                message.color = "#7F7";
+            } else {
+                message.text = "Someone took a set!";
+                message.color = "#FF0";
+            }
+            score = data.score;
+            timer = 60;
+        }
+        else if (typeof data.reset != 'undefined') {
+            message.text = "The board was reset.";
+            message.color = "#FF0";
+            timer = 60;
+        }
+        else {
+            message.text = "That's not a set.";
+            message.color = "#F00";
+        }
+    }
+    function processGrid(grid) {
+        for (row of grid) 
+        for (card of row) {
+            card.x = card.j * (padding + cardW) + padding;
+            card.y = card.i * (padding + cardH) + padding;
+            card.draw = function() {
+                drawRoundRect(colors[this.color], this.x, this.y, cardW, cardH, 10, true);
+                drawShape(this.shape, shapeColors[this.shapeColor], this.x, this.y, cardW, cardH);
+            }
+            card.contains = function(mx, my) {
+                return (mx >= this.x && mx <= this.x + cardW) && my >= this.y && my <= this.y + cardH;
+            }
+            card.clicked = function() {
+                pos = selected.indexOf(this);
+                if (pos == -1) {
+                    if (selected.length < 3) {
+                        selected.push(this);
+                    }
+                    if (selected.length == 3) {
+                        scoreSet(selected);
+                    }
+                } else {
+                    selected.splice(pos, 1);
+                }
+            }
+        }
+        return grid;
+    }
+
+    function enableButton() {
+        if (namebox.value.length > 0) joinbtn.disabled = false;
+        else joinbtn.disabled = true;
+    }
+
+    function scoreSet(set) {
+        let indexes = [];
+        for (card of set) {
+            indexes.push({i: card.i, j: card.j});
+        }
+        setTimeout(() => socket.send(JSON.stringify(indexes)), 100);
+        
+    }
+
+    function clickAction(e) {
+        for (row of grid) 
+        for (card of row) {
+            if (card.contains(e.x, e.y)) {
+                card.clicked();
+                return;
+            }
+        }
+    }
+
+    function draw() {
+        ctx.fillStyle = backcolor;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        for (row of this.grid) 
+        for (card of row) {
+            card.draw();
+        }
+        for (card of selected) {
+            drawRoundRect("yellow", card.x, card.y, cardW, cardH, 10, false);
+        }
+        drawHUD();
+    }
+
+    function drawRoundRect(color, x, y, w, h, r, fill) {
+        pi = Math.PI;
+        ctx.lineWidth = 2;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x + r, y + r, r, 1.5 * pi, pi, true);
+        ctx.arc(x + r, y + h - r, r, pi, .5 * pi, true);
+        ctx.arc(x + w - r, y + h - r, r, .5 * pi, 0, true);
+        ctx.arc(x + w - r, y + r, r, 0, 1.5 * pi, true);
+        ctx.lineTo(x + r, y);
+        ctx.strokeStyle = "black"
+        if (fill) {
+            ctx.fill();
+        } else {
+            ctx.strokeStyle = color;
+            ctx.stroke();
+        }
+    }
+
+    function drawShape(shape, color, x, y, w, h) {
+        ctx.fillStyle = color;
+        let centerX = x + w / 2;
+        let centerY = y + h / 2;
+        r = 1 / 3 * w;
+        switch (shape) {
+            case 0: { //circle
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, r, 0, 2 * Math.PI);
+                ctx.fill();
+                break;
+            }
+            case 1: { //triangle
+                let leftX = x + 1 / 6 * w;
+                let rightX = x + 5 / 6 * w;
+                ctx.beginPath();
+                ctx.moveTo(leftX, y + 2 / 3 * h);
+                ctx.lineTo(centerX, y + 1 / 3 * h);
+                ctx.lineTo(rightX, y + 2 / 3 * h);
+                ctx.fill();
+                break;
+            }
+            case 2: { //square 
+                let leftX = centerX - r;
+                let rightX = centerX + r;
+                let topY = centerY - r;
+                let botY = centerY + r;
+                ctx.beginPath();
+                ctx.moveTo(leftX, topY);
+                ctx.lineTo(leftX, botY);
+                ctx.lineTo(rightX, botY);
+                ctx.lineTo(rightX, topY);
+                ctx.fill();
+
+                break;
+            }
+        }
+    }
+
+    function drawHUD() {
+        ctx.font = "18px sans-serif";
+        ctx.fillStyle = message.color;
+        ctx.fillText(message.text, 320, 50);
+        ctx.fillStyle = "yellow";
+        ctx.fillText("Score: " + score, 320, 30);
+        ctx.fillText(timer, 320, 80);
+    }
+
+</script>
+
+</html>

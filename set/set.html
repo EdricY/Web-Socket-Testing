@@ -1,0 +1,183 @@
+
+<canvas id="canvas" width="480" height="780">
+</canvas>
+<script>
+    var vertical = true;
+    var canvas = document.getElementById("canvas");
+    canvas.onmousedown = this.clickAction;
+    var ctx = canvas.getContext("2d");
+
+    var backcolor = "#333";
+    var cardW = 90;
+    var cardH = 150;
+    var padding = 10;
+    var shapes = ["circle", "triangle", "square"];
+
+    var colors = ["#812", "#26C", "#262"];
+    var shapeColors = ["#F9F", "#FB5", "#8CD"];
+
+    var selected = [];
+    var grid = [];
+    var message = { text : "Select 3 cards", color : "yellow"};
+    var score = 0;
+
+    for (i in [0,1,2,3]) {
+        let row = [];
+        for (j in [0,1,2]) {
+            row.push(randomCard(i, j));
+        }
+        grid.push(row);
+    }
+
+    var drawInterval= setInterval(draw, 100);
+
+    function randomCard(i, j) {
+        return {
+            color : Math.floor((Math.random() * colors.length)),
+            shape:  Math.floor((Math.random() * shapes.length)),
+            shapeColor : Math.floor((Math.random() * shapeColors.length)),
+            i : i,
+            j : j,
+            x : j * (padding + cardW) + padding,
+            y : i * (padding + cardH) + padding,
+            draw : function() {
+                drawRoundRect(colors[this.color], this.x, this.y, cardW, cardH, 10, true);
+                drawShape(this.shape, shapeColors[this.shapeColor], this.x, this. y, cardW, cardH); 
+            },
+            contains : function(mx, my) {
+                return (mx >= this.x && mx <= this.x+cardW) && my >= this.y && my <= this.y+cardH;
+            },
+            clicked : function() {
+                pos = selected.indexOf(this);
+                if (pos == -1) {
+                    selected.push(this);
+                    if (selected.length >= 3) {
+                        setTimeout(scoreSet, 100);
+                    }
+                } else {
+                    selected.splice(pos, 1);
+                }
+            }
+        }
+    }
+
+    function scoreSet() {
+
+        if (verifySet(selected)) {
+            for (card of selected) {
+                grid[card.i][card.j] = randomCard(card.i, card.j);
+            }
+            message.text = "Nice Set!";
+            message.color = "#77FF77";
+            score++;
+        } else {
+            message.text = "That's not a set.";
+            message.color = "#FF7777";
+        }
+        selected = [];
+    }
+
+    function verifySet(set) {
+        let cScore = 0;
+        let sScore = 0;
+        let iScore = 0;
+        for (card of set) {
+            cScore += card.color;
+            sScore += card.shape;
+            iScore += card.shapeColor;
+        }
+        return cScore % 3 + sScore % 3 + iScore % 3 == 0
+    }
+
+    function clickAction(e) {
+        for (row of grid) {
+            for (card of row) {
+                if (card.contains(e.x, e.y)){
+                    card.clicked();
+                    return;
+                }
+            }
+        }
+    }
+
+    function draw() {
+        ctx.fillStyle = backcolor;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        for (row of grid) {
+            for (card of row) {
+                card.draw();
+            }
+        }
+        for (card of selected) {
+            drawRoundRect("yellow", card.x, card.y, cardW, cardH, 10, false);
+        }
+        drawHUD();
+    }
+
+    function drawRoundRect(color, x, y, w, h, r, fill) {
+        pi = Math.PI;
+        ctx.lineWidth = 2;
+        ctx.fillStyle = color;
+        ctx.beginPath(); 
+        ctx.arc(x+r,y+r,r,1.5*pi,pi, true); 
+        ctx.arc(x+r,y+h-r,r,pi,.5*pi, true);
+        ctx.arc(x+w-r,y+h-r,r,.5*pi,0, true);
+        ctx.arc(x+w-r,y+r,r,0,1.5*pi, true);
+        ctx.lineTo(x+r,y);
+        ctx.strokeStyle = "black"
+        if (fill) {
+            ctx.fill();
+        } else {
+            ctx.strokeStyle = color;
+            ctx.stroke();
+        }
+    }
+
+    function drawShape(shape, color, x, y, w, h) {
+        ctx.fillStyle = color;
+        let centerX = x + w/2;
+        let centerY = y + h/2;
+        r = 1/3 * w;
+        switch (shape) {
+            case 0: { //circle
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, r, 0, 2*Math.PI);
+                ctx.fill();
+                break;
+            }
+            case 1: { //triangle
+                let leftX = x + 1/6 * w;
+                let rightX = x + 5/6 * w;
+                ctx.beginPath();
+                ctx.moveTo(leftX, y + 2/3 * h);
+                ctx.lineTo(centerX, y + 1/3 * h);
+                ctx.lineTo(rightX, y + 2/3 * h);
+                ctx.fill();
+                break;
+            }
+            case 2: { //square 
+                let leftX = centerX - r;
+                let rightX = centerX + r;
+                let topY = centerY - r;
+                let botY = centerY + r;
+                ctx.beginPath();
+                ctx.moveTo(leftX, topY);
+                ctx.lineTo(leftX, botY);
+                ctx.lineTo(rightX, botY);
+                ctx.lineTo(rightX, topY);
+                ctx.fill();
+
+                break;
+            }
+        }
+    }
+
+    function drawHUD() {
+        ctx.font = "18px sans-serif";
+        ctx.fillStyle = message.color;
+        ctx.fillText(message.text, 320, 50);
+        ctx.fillStyle = "yellow";
+        ctx.fillText("Score: " +score, 320, 30);
+    }
+
+</script>
