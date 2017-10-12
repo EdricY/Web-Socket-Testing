@@ -1,0 +1,91 @@
+<html>
+<h1>
+Hello World!
+</h1>
+<canvas id="canvas" width="960" height="640">
+</canvas>
+
+<script>
+var ctx = canvas.getContext("2d");
+var backcolor = "#777";
+var pause = 10;
+
+var url = window.location.hostname;
+    url = 'ws://' + url + ':3423';
+
+var socket;
+    socket = new WebSocket(url);
+    socket.onopen = function() {
+        socket.send("Connect");
+    }
+    socket.onmessage = (event) => {
+      let temp = JSON.parse(event.data);
+      console.log(temp);
+      if (Array.isArray(temp)){
+        others = []
+        for (let p of temp) {
+          others.push(p);
+        }
+      }
+    }
+
+var others = [];
+var player = {
+  x: 100, y: 100,
+  draw : function(){
+    ctx.fillStyle="red";
+    ctx.fillRect(this.x, this.y, 20,20);
+  }
+
+}
+
+
+
+
+function update() {
+  socket.send(JSON.stringify({x:player.x,y:player.y}));
+}
+function draw() {
+  ctx.fillStyle = backcolor;
+  ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+  player.draw();
+  for (let o of others) {
+    ctx.fillStyle = "green";
+    ctx.fillRect(o.x, o.y, 20,20);
+  }
+}
+
+function tick() {
+  update();
+  draw();
+}
+
+var gameInt = setInterval(tick, pause);
+
+onkeydown = e => {
+  let k = e.keyCode;
+    switch (k) {
+        case 87 : { // w
+              player.y += -5;
+            break;
+        }
+        case 65 : { // a
+              player.x += -5;
+            break;
+        }
+        case 83 : { //s
+              player.y += 5;
+            break;
+        }
+        case 68 : { //d
+              player.x += 5;
+            break;
+        }
+        // case 32 : { //space
+        // }
+    }
+}
+
+
+</script>
+</html>

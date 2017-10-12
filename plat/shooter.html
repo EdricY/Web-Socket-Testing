@@ -1,0 +1,439 @@
+
+<canvas id="canvas" width="960" height="640">
+</canvas>
+
+<script>
+    var pause = 10;
+    var backcolor = "#333";
+    var ctx = canvas.getContext("2d");
+
+    var pProjectiles = [];
+    var enemies = [];
+    var oProjectiles = [];
+    var keys = {};
+    var ppcount = 0;
+
+    var spawnspeed = .005;
+
+    var shotTimer = 0;
+
+    onkeydown = buttonDown;
+    onkeyup = buttonUp;
+
+    var player = {
+        x: 240, y: 500, color: "red", size: 20, vx:0, vy:0, accel: 1,
+        update: function() {
+            this.vx = 0;
+            this.vy = 0;
+            if      (keys[87])  this.vy= -this.accel;       //w
+            else if (keys[83])  this.vy= this.accel;        //s
+            if      (keys[65])  this.vx= -this.accel * 2;   //a
+            else if (keys[68])  this.vx= this.accel * 2;    //d
+
+            this.x += this.vx;
+            this.y += this.vy;
+        },
+        draw: function() {
+            drawChevron(this.x, this.y, this.color, this.size);
+        },
+        contains: function(ox, oy) {
+            let r = this.size / 2;
+            let dx = Math.abs(ox - this.x);
+            if (dx > r) return false;               //outside x-bound
+            if (this.y - r + dx > oy) return false; //above slope;
+            if (this.y + r < oy) return false;      //under bottom
+            return true;
+
+            //return Math.abs(ox - x) <= r && Math.abs(oy - y <= r);
+        }
+
+    };
+
+
+    function tick() {
+        player.update();
+        for (let p of pProjectiles) {
+            if (p.update) p.update();
+        }
+        for (let e of enemies) {
+            if (e.update) e.update();
+        }
+        if (Math.random() < spawnspeed) {
+            spawnspeed += .0001;
+            let e = getEnemyA();
+            enemies.push(e);
+        }
+
+        shotTimer--;
+        if(shotTimer <= 0 && keys[32]) {
+            shootBoomerang();
+            shotTimer = 50;
+        }
+        draw();
+    }
+
+    function getEnemyA() {
+        return {
+            x: Math.random() * 960,
+            y: -10,
+            hp: 10,
+            rand: Math.random(),
+            draw: function() {
+                drawCircle(this.x, this.y, 10, "cyan");
+            },
+            update: function() {
+                this.y+= (.5+ this.rand/1)*(.005/spawnspeed) ;
+            }
+        }
+    }
+
+    function shootTracker() {
+        let trackingBullet = {
+            id : ppcount++,
+            getX : function () { return this.x; },
+            getY : function () { return this.y },
+            x : player.x,
+            y : player.y - 5,
+            r : 5,
+            v : 6,
+            a : 0,
+            t : 0,
+            angle: 0 + (4*Math.random()) - 2,
+            color: "magenta",
+            draw :  function() {
+                drawTear(this.getX(), this.getY(), this.r, this.color, this.angle);
+            },
+            update : function () {
+                this.y -= this.v*Math.cos(this.angle);
+                this.x += this.v*Math.sin(this.angle);
+                if (this.v < 3)this.v += this.a;
+                this.track(player.x, player.y)
+                this.t++;
+                if (offScreen(this.x, this.y, 2*this.w)) removePProjectile(this.id);
+            },
+            track : function(ox, oy) {
+                let dx = this.x - ox;
+                let dy = this.y - oy;
+                if (dx == 0) dx += .1;
+                let ca = Math.atan((dy)/(dx)) +  Math.PI/2;
+                if (dx > 0) ca += Math.PI;
+                da = ca - this.angle + 2*Math.PI;
+                da %= 2*Math.PI;
+                let limit = .03;
+                if (da >= Math.PI && da < 2*Math.PI - limit) {
+                    da = 2*Math.PI - limit;
+                } else if (da <= Math.PI && da > limit) {
+                    da = limit;
+                }
+
+                this.angle += da;
+                this.angle %= 2*Math.PI
+            }
+        }
+
+        pProjectiles.push(trackingBullet);
+
+    }
+
+    function shootLaser() {
+        let laser = {
+            id : ppcount++,
+            getX : function () { return player.x; },
+            getY : function () { return player.y },
+            w : 1,
+            maxw : 30,
+            h : 0,
+            t : 0,
+            color: "cyan",
+            draw :  function() {
+                ctx.fillStyle = "white";
+                drawCircle(this.getX(), this.getY() - this.w/2, this.w/2, "white");
+                ctx.fillRect(this.getX() - (this.w/2), this.getY() - this.w/2, this.w, this.h);
+                ctx.fillStyle = this.color;
+                drawCircle(this.getX(), this.getY() - this.w/2, this.w/2*.8, this.color);
+                ctx.fillRect(this.getX() - (this.w/2 - .1*this.w), this.getY() - this.w/2, this.w * .8, this.h);
+
+            },
+            update : function() {
+                this.t++;
+                let t = this.t;
+                if (t < 40) this.h = -t/20 * canvas.height;
+                if (t == 40) this.w = 0;
+                if (t > 50 && t < 120 && this.w < 30) this.w += 5;
+                if (t >= 160) {
+                    if (t%3 == 0) this.w = this.maxw;
+                    else this.w = 0;
+                }
+            }
+        }
+
+        pProjectiles.push(laser);
+        setTimeout(function() {
+            removePProjectile(laser.id);
+        }, 2000);
+    }
+
+    function shootBoomerang() {
+        let boomerang = {
+            id : ppcount++,
+            getX : function () { return this.x; },
+            getY : function () { return this.y },
+            x : player.x,
+            y : player.y - 10,
+            r : 10,
+            vx : Math.random() * 4 - 2,
+            vy : -10,
+            angle : 0,
+            color: "cyan",
+            draw :  function() {
+                drawSquare(this.getX(), this.getY(), this.r, this.color, this.angle);
+            },
+            update : function () {
+                this.y += this.vy;
+                this.x += this.vx;
+                this.track(player.x, player.y)
+                if (offScreen(this.x, this.y, 2*this.r))
+                    removePProjectile(this.id);
+                // for (e of enemies) {
+                //     if (){
+                //
+                //     }
+                // }
+            },
+            track : function(ox, oy) {
+                let dx = this.x - ox;
+                let dy = this.y - oy;
+                let sq = Math.sqrt((dx*dx) + (dy*dy));
+                this.angle += .001 * dx
+                this.vx -= .2* dx / sq;
+                this.vy -= .2* dy / sq;
+            }
+        }
+        pProjectiles.push(boomerang);
+        setTimeout(function() {
+            removePProjectile(boomerang.id);
+        }, 5000);
+    }
+
+    function shootSpread(n=1) {
+        let angle = Math.PI / (n+1);
+        for (i = 1; i <= n; i++){
+            let bullet = getBullet(player.x, player.y - (player.size/2), angle * i - Math.PI/2)
+            pProjectiles.push(bullet);
+            bullet.update();bullet.update()
+        }
+    }
+
+    function shootCircle(pellets = 3) {
+        let r = 10;
+        let v = 6;
+        let friction = .98;
+        let bomb = {
+            id : ppcount++,
+            getX : function () { return this.x; },
+            getY : function () { return this.y },
+            r : r,
+            x : player.x,
+            y : player.y - r*2,
+            color: "cyan",
+            draw :  function() {
+                drawCircle(this.getX(), this.getY(), 10, this.color);
+            },
+            update : function () {
+                if (v <= .25) {
+                    this.explode();
+                }
+                this.y -= v;
+                v *= friction;
+            },
+            explode : function() {
+                let angle = 2 * Math.PI / pellets;
+                let rand = 2 * Math.PI * Math.random();
+                for (i = 0; i < pellets; i++) {
+                    let bullet = getBullet(this.x, this.y, i * angle + rand);
+                    pProjectiles.push(bullet);
+                }
+                removePProjectile(this.id);
+            }
+        }
+        pProjectiles.push(bomb);
+    }
+
+    function getBullet(x, y, angle) {
+        let v = 4;
+        let a = .3;
+        let r = 5;
+        return {
+            id : ppcount++,
+            getX : function () { return this.x; },
+            getY : function () { return this.y },
+            r : r,
+            x : x,
+            y : y - r,
+            color: "cyan",
+            draw :  function() {
+                drawTear(this.getX(), this.getY(), this.r, this.color, angle);
+            },
+            update : function () {
+                this.y -= v*Math.cos(angle);
+                this.x += v*Math.sin(angle);
+                v += a;
+                if (offScreen(this.x, this.y, 2*this.r)) removePProjectile(this.id);
+            }
+        };
+    }
+
+    function removePProjectile(id) {
+        for (i in pProjectiles) {
+            if (pProjectiles[i].id == id) {
+                pProjectiles.splice(i, 1);
+                return;
+            }
+        }
+    }
+
+    function drawChevron(x, y, color, size, angle = 0) {
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.fillStyle = color;
+        let r = size / 2;
+        ctx.beginPath();
+        ctx.moveTo(-r, r);   //bottom left
+        ctx.lineTo(0,- r);       //top
+        ctx.lineTo(r, r);
+        ctx.lineTo(0, 0);
+        ctx.lineTo(-r,r);
+        ctx.fill();
+        ctx.resetTransform();
+    }
+
+    function drawCircle(x, y, r, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 2*Math.PI);
+        ctx.fill();
+    }
+    function drawSquare(x, y, r, color, angle) {
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.fillRect(-r, -r, 2*r, 2*r);
+        ctx.resetTransform();
+    }
+
+    function drawTear(x, y, r, color, angle) {
+        let pi = Math.PI;
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0 + 2*r);
+        ctx.arc(0, 0, r, pi - pi/4, pi/4);
+        ctx.lineTo(0, 0 + 2*r);
+        ctx.strokeStyle = "black";
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.resetTransform();
+    }
+
+    function draw() {
+        ctx.fillStyle = backcolor;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        for (p of pProjectiles) {
+            if (p.draw) p.draw();
+        }
+        for (o of oProjectiles) {
+            if (o.draw) o.draw();
+        }
+        for (e of enemies) {
+            if (e.draw) e.draw();
+        }
+
+        player.draw();
+    }
+
+
+    function buttonDown(e) {
+        let k = e.keyCode;
+        switch (k){
+            case 87 : { // w
+                if (!keys[k])
+                    player.vy=-player.accel;
+                break;
+            }
+            case 65 : { // a
+                if (!keys[k])
+                    player.vx=-player.accel * 2;
+                break;
+            }
+            case 83 : { //s
+                if (!keys[k])
+                    player.vy=player.accel;
+                break;
+            }
+            case 68 : { //d
+                if (!keys[k])
+                    player.vx=player.accel * 2;
+                break;
+            }
+            // case 32 : { //space
+            //     if (!keys[k])
+            //         shootSpread();
+            //     break;
+            // }
+        }
+        keys[k] = true;
+    }
+
+    function buttonUp(e) {
+        let k = e.keyCode;
+        switch (k) {
+            case 87 : { // w
+                if (player.vy < 0)
+                    player.vy = 0;
+                break;
+            }
+            case 65 : { // a
+                if (player.vx < 0)
+                    player.vx = 0;
+                break;
+            }
+            case 83 : { //s
+                if (player.vy > 0)
+                    player.vy = 0;
+                break;
+            }
+            case 68 : { //d
+                if (player.vx > 0)
+                    player.vx = 0;
+                break;
+            }
+            // case 32 : { //space
+            // }
+        }
+        keys[k] = false;
+    }
+
+    function offScreen(x, y, r) {
+        return (x + r < 0 || y + r < 0 || x - r > canvas.width || y - r > canvas.height)
+    }
+
+    function circlesIntersect(x, y, r, ox, oy, or) {
+        let dx = x - ox;
+        let dy = y - oy;
+        let rs = r+or;
+        return (dx*dx + dy*dy) < rs*rs;
+    }
+    function circleRectIntersect(x, y, r, ox, oy, ow, oh) {
+        let px = Math.min(Math.max(x, ox + ow), ox - ow);
+        let py = Math.min(Math.max(x, oy + oh), oy - oh);
+        let dx = x - px;
+        let dy = y - py;
+        return (dx*dx + dy*dy) < r*r;
+    }
+
+    var gameInt = setInterval(tick, pause);
+</script>
