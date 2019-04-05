@@ -1,0 +1,154 @@
+<html>
+<div>
+  <label for="hostID">Host ID</label>
+  <input id="hostID" type="text">
+  <button onclick="connect()">Connect</button>
+</div>
+<div>
+  <button onclick="host()">Host</button>
+</div>
+<div id="myID">
+
+</div>
+
+<canvas id="canvas" width="960" height="640">
+</canvas>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@0.3.20/dist/peer.min.js"></script>
+<script>
+  var peer;
+  var untouched = true;
+  var hosting = false;
+  var connected = false;
+  var connection;
+
+  function host() {
+    peer = new Peer();
+    myID.innerHTML = "Initializing...";
+    peer.on('open', () => {
+      myID.innerHTML = peer.id;
+    });
+
+    hosting = true;
+    peer.on('connection', function (conn) {
+      console.log('h peer on connect')
+      connection = conn;
+      conn.on('data', function (data) {
+        if (untouched) {
+          if (data === "readyforgamejam") untouched = false;
+          console.log('connected!')
+          connected = true;
+          conn.send("yeahletsgo");
+          return;
+        }
+        console.log(data);
+      });
+    });
+  }
+
+  function connect() {
+    peer = new Peer();
+    peer.on('open', () => {
+      myID.innerHTML = "client: " + peer.id;
+      connection = peer.connect(hostID.value);
+      connection.on('data', function (data) {
+        console.log(data);
+      });
+      connection.on('open', function () {
+        connection.send('readyforgamejam');
+        connected = true;
+      });
+    });
+  }
+
+  var gameState = {
+    WAITING: 0, PLAYING: 1, HOSTING: 2,
+    state: 0,
+    update: function () { },
+    draw: function () { },
+  }
+
+  var ctx = canvas.getContext("2d");
+  var backcolor = "#777";
+  var pause = 10;
+
+  var player = {
+    x: 100, y: 100,
+    draw: function () {
+      ctx.fillStyle = "red";
+      ctx.fillRect(this.x, this.y, 20, 20);
+    }
+  }
+
+  const UPDATES_PER_SEC = 30;
+  const MS_PER_UPDATE = 1000/UPDATES_PER_SEC;
+  var lastTime = Date.now();
+  var lag = 0;
+  var redraw = false;
+  function tick(t) {
+    let current = Date.now();
+    let elapsed = current - lastTime;
+    lastTime = current;
+    lag += elapsed;
+    while (lag >= MS_PER_UPDATE) {
+      gameState.update();
+      lag -= MS_PER_UPDATE;
+      redraw = true;
+    }
+    if (redraw) {
+      gameState.draw();
+      redraw = false;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+
+
+  function update() {
+
+  }
+
+  function draw() {
+    ctx.fillStyle = backcolor;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    player.draw();
+    for (let o of others) {
+      ctx.fillStyle = "green";
+      ctx.fillRect(o.x, o.y, 20, 20);
+    }
+  }
+
+  var gameInt = setInterval(tick, pause);
+
+  onkeydown = e => {
+    let k = e.keyCode;
+    switch (k) {
+      case 87: { // w
+        player.y += -5;
+        redraw = true;
+        break;
+      }
+      case 65: { // a
+        player.x += -5;
+        redraw = true;
+        break;
+      }
+      case 83: { //s
+        player.y += 5;
+        redraw = true;
+        break;
+      }
+      case 68: { //d
+        player.x += 5;
+        redraw = true;
+        break;
+      }
+      // case 32 : { //space
+      // }
+    }
+  }
+
+
+</script>
+
+</html>
