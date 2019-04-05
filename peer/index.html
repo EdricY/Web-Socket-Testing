@@ -11,7 +11,7 @@
 
 </div>
 
-<canvas id="canvas" width="960" height="640">
+<canvas id="canvas" width="400" height="400">
 </canvas>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@0.3.20/dist/peer.min.js"></script>
 <script>
@@ -20,6 +20,8 @@
   var hosting = false;
   var connected = false;
   var connection;
+
+  var partner = {};
 
   function host() {
     peer = new Peer();
@@ -34,13 +36,17 @@
       connection = conn;
       conn.on('data', function (data) {
         if (untouched) {
-          if (data === "readyforgamejam") untouched = false;
-          console.log('connected!')
-          connected = true;
-          conn.send("yeahletsgo");
+          if (data === "readyforgamejam") {
+            untouched = false;
+            console.log('connected!')
+            connected = true;
+            conn.send("yeahletsgo");
+            startGame();
+          }
+          // ignore anything else
           return;
         }
-        console.log(data);
+        handleMessage(data);
       });
     });
   }
@@ -51,7 +57,17 @@
       myID.innerHTML = "client: " + peer.id;
       connection = peer.connect(hostID.value);
       connection.on('data', function (data) {
-        console.log(data);
+        if (untouched) {
+          if (data === "yeahletsgo") {
+            untouched = false;
+            console.log('connected!')
+            connected = true;
+            startGame();
+          }
+          // ignore anything else
+          return;
+        }
+        handleMessage(data);
       });
       connection.on('open', function () {
         connection.send('readyforgamejam');
@@ -59,6 +75,23 @@
       });
     });
   }
+
+  function startGame() {
+    gameState.update = update;
+    gameState.draw = draw;
+  }
+
+  function handleMessage(data) {
+    let parsed = JSON.parse(data);
+    let type = parsed.type;
+    let obj = parsed.obj;
+    if (type == POS) {
+      partner = obj;
+    } else {
+      console.log(obj);
+    }
+  }
+
 
   var gameState = {
     WAITING: 0, PLAYING: 1, HOSTING: 2,
@@ -77,6 +110,11 @@
       ctx.fillStyle = "red";
       ctx.fillRect(this.x, this.y, 20, 20);
     }
+  }
+
+  function drawPlayer(player) {
+    ctx.fillStyle = "magenta";
+    ctx.fillRect(player.x, player.y, 20, 20);
   }
 
   const UPDATES_PER_SEC = 30;
@@ -105,17 +143,14 @@
 
 
   function update() {
-
+    connection.send(newPacket(POS, player))
   }
 
   function draw() {
     ctx.fillStyle = backcolor;
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawPlayer(partner);
     player.draw();
-    for (let o of others) {
-      ctx.fillStyle = "green";
-      ctx.fillRect(o.x, o.y, 20, 20);
-    }
   }
 
   var gameInt = setInterval(tick, pause);
@@ -148,6 +183,13 @@
     }
   }
 
+// packet types
+POS = 0;
+OTHER = 1;
+
+function newPacket(type, obj){
+  return JSON.stringify({'type': type, 'obj': obj});
+}
 
 </script>
 
